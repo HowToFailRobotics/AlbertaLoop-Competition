@@ -8,9 +8,12 @@
 #define TASK4 3
 #define NUM_STATES 4
 
+// States
 #define FORWARD 1
 #define STOP    2
 #define REVERSE 3
+#define LEFT 4
+#define RIGHT 5
 
 #define PROXIMITY_INPUT  7
 
@@ -42,7 +45,7 @@ void init_timer()
   TCCR1B = 0;// same for TCCR1B
   TCNT1  = 0;//initialize counter value to 0
   // set compare match register for 1hz increments
-  OCR1A = 15624 / 10;// = (16*10^6) / (1*1024) - 1 (must be <65536)
+  OCR1A = 15624 / 100;// = (16*10^6) / (1*1024) - 1 (must be <65536)
   // turn on CTC mode
   TCCR1B |= (1 << WGM12);
   // Set CS10 and CS12 bits for 1024 prescaler
@@ -67,6 +70,9 @@ void translateIR() // takes action based on IR code received
 
 // describing Remote IR codes 
 {
+  if (results.value == 0xFFFFFFFF) {return;}
+  Serial.println("Hex value:");
+  Serial.println(results.value, HEX);
   switch(results.value)
 
   {
@@ -76,6 +82,7 @@ void translateIR() // takes action based on IR code received
   
   case 0xFF22DD:
     Serial.println("FAST BACK");
+    Serial.println(motor_state);
     if(motor_state == FORWARD)
       next_motor_state = STOP;
     else
@@ -95,20 +102,36 @@ void translateIR() // takes action based on IR code received
       next_motor_state = FORWARD;
     break;
 
-  case 0xFFE01F: Serial.println("DOWN");    break;
+  case 0xFF906F:
+    Serial.println("RIGHT");
+    if(motor_state != STOP)
+      next_motor_state = STOP;
+    else
+      next_motor_state = RIGHT;
+    break;
+
+  case 0xFFE01F:
+    Serial.println("LEFT");
+    if(motor_state != STOP)
+      next_motor_state = STOP;
+    else
+      next_motor_state = LEFT;
+    break;
+
+  // case 0xFFE01F: Serial.println("DOWN");    break;
   case 0xFFA857: Serial.println("VOL-");    break;
-  case 0xFF906F: Serial.println("UP");    break;
+  // case 0xFF906F: Serial.println("UP");    break;
   case 0xFF9867: Serial.println("EQ");    break;
   case 0xFFB04F: Serial.println("ST/REPT");    break;
   case 0xFF6897: Serial.println("0");    break;
   case 0xFF30CF: Serial.println("1");    break;
-  case 0xFF18E7: Serial.println("2");    break;
+  // case 0xFF18E7: Serial.println("2");    break;
   case 0xFF7A85: Serial.println("3");    break;
   case 0xFF10EF: Serial.println("4");    break;
-  case 0xFF38C7: Serial.println("5");    break;
+  // case 0xFF38C7: Serial.println("5");    break;
   case 0xFF5AA5: Serial.println("6");    break;
   case 0xFF42BD: Serial.println("7");    break;
-  case 0xFF4AB5: Serial.println("8");    break;
+  // case 0xFF4AB5: Serial.println("8");    break;
   case 0xFF52AD: Serial.println("9");    break;
   case 0xFFFFFFFF: Serial.println(" REPEAT");break;  
 
@@ -137,13 +160,32 @@ void motor_forward()
 
 void motor_reverse()
 {
-  // Serial.println("reversing motor");
+  Serial.println("reversing motor");
   digitalWrite(dir1PinA, HIGH);
   digitalWrite(dir2PinA, LOW);
-  analogWrite(speedPinA, 50);
 
   digitalWrite(dir1PinB, HIGH);
   digitalWrite(dir2PinB, LOW);
+}
+
+void motor1_forward() {
+    digitalWrite(dir1PinA, LOW);
+    digitalWrite(dir2PinA, HIGH);
+}
+
+void motor1_reverse() {
+    digitalWrite(dir1PinA, HIGH);
+    digitalWrite(dir2PinA, LOW);
+}
+
+void motor2_forward() {
+    digitalWrite(dir1PinB, LOW);
+    digitalWrite(dir2PinB, HIGH);
+}
+
+void motor2_reverse() {
+    digitalWrite(dir1PinB, HIGH);
+    digitalWrite(dir2PinB, LOW);
 }
 
 void motor_stop()
@@ -160,12 +202,12 @@ void motor_stop()
 
 void task1()
 {
-  Serial.println("Task 1");
+  // Serial.println("Task 1");
   if (irrecv.decode(&results)) // have we received an IR signal?
   {
     irrecv.resume(); // receive the next value
     translateIR(); 
-  Serial.println("recieved signal");
+    // Serial.println("recieved signal");
   }  
 }
 
@@ -173,7 +215,7 @@ void task2()
 {
   // Serial.println("Task 2");
   int sensorValue = digitalRead(7);
-  Serial.println(sensorValue);
+  // Serial.println(sensorValue);
 }
 
 void task3()
@@ -182,10 +224,20 @@ void task3()
   switch(motor_state)
   {
     case FORWARD:
-      motor_forward();
+      motor1_forward();
+      motor2_forward();
     break;
     case REVERSE:
-      motor_reverse();
+      motor1_reverse();
+      motor2_reverse();
+    break;
+    case RIGHT:
+      motor1_reverse();
+      motor2_forward();
+    break;
+    case LEFT:
+      motor1_forward();
+      motor2_reverse();
     break;
     case STOP:
       motor_stop();
@@ -206,7 +258,6 @@ void setup() {
   // Motor 1
   pinMode(dir1PinA,OUTPUT);
   pinMode(dir2PinA,OUTPUT);
-  pinMode(speedPinA,OUTPUT);
 
   // Setup for Motor 2
   pinMode(dir1PinB, OUTPUT);
